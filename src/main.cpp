@@ -14,7 +14,7 @@ String pass;
 String ip;
 String gateway;
 
-//File paths to save input values permanently
+//File paths to save data provided from initial wifiManager page
 const char* ssidPath = "/ssid.txt";
 const char* passPath = "/pass.txt";
 const char* ipPath = "/ip.txt";
@@ -24,14 +24,14 @@ IPAddress localIP; //Hardcoded in HTML
 IPAddress localGateway; //Hardcoded in HTML
 IPAddress subnet(255, 255, 0, 0);
 
-// Search for parameter in HTTP POST request
+//Webpace controls param names
 const char* PARAM_INPUT_1 = "ssid";
 const char* PARAM_INPUT_2 = "pass";
 const char* PARAM_INPUT_3 = "ip";
 const char* PARAM_INPUT_4 = "gateway";
 
-// Set GPIO
-const int  column_pair_1_1_pin_plus = 16;
+//GPIOs
+const int column_pair_1_1_pin_plus = 16;
 const int column_pair_1_2_pin_minus = 17;
 const int column_pair_1_3_pin_plus = 18;
 const int column_pair_1_4_pin_minus = 19;
@@ -41,13 +41,13 @@ const int column_pair_2_2_pin_minus = 33;
 const int column_pair_2_3_pin_plus = 26;
 const int column_pair_2_4_pin_minus = 27;
 
-// Timer variables
+//Timer variables
 unsigned long previousMillis = 0;
-const long interval = 10000;  //Interval to wait for Wi-Fi connection (milliseconds)
+const long interval = 10000;  //Interval to wait for establishing Wi-Fi connection
 
 String activeColumnPairState;
 
-// Initialize WiFi
+//Initialize WiFi
 bool initWiFi() {
   if (ssid == "" || ip == "") {
     Serial.println("Undefined SSID or IP address.");
@@ -80,7 +80,7 @@ bool initWiFi() {
   return true;
 }
 
-// Initialize LittleFS
+//Initialize LittleFS
 void initLittleFS() {
   if (!LittleFS.begin(true)) {
     Serial.println("An error has occurred while mounting LittleFS");
@@ -88,11 +88,11 @@ void initLittleFS() {
   Serial.println("LittleFS mounted successfully");
 }
 
-// Read File from LittleFS
+//Read File from LittleFS
 String readFile(fs::FS &fs, const char * path){
   Serial.printf("Reading file: %s\r\n", path);
 
-  File file = fs.open(path);//tutaj try-catch
+  File file = fs.open(path); //TODO: Try-catch
   if (!file || file.isDirectory()) {
     Serial.println("- failed to open file for reading");
     return String();
@@ -139,7 +139,7 @@ String processor(const String& var) {
 }
 
   void setPins(String pair) {
-    //first, second, off
+    //pair = first, second, off
     digitalWrite(column_pair_1_1_pin_plus, LOW);
     digitalWrite(column_pair_1_2_pin_minus, LOW);
     digitalWrite(column_pair_1_3_pin_plus, LOW);
@@ -151,19 +151,21 @@ String processor(const String& var) {
     digitalWrite(column_pair_2_4_pin_minus, LOW);
 
     if (pair == "first") {
-        digitalWrite(column_pair_1_1_pin_plus, HIGH);
-        digitalWrite(column_pair_1_2_pin_minus, HIGH);
-        digitalWrite(column_pair_1_3_pin_plus, HIGH);
-        digitalWrite(column_pair_1_4_pin_minus, HIGH);
-        Serial.println(pair);
-    } else if (pair == "second") {
-        digitalWrite(column_pair_2_1_pin_plus, HIGH);
-        digitalWrite(column_pair_2_2_pin_minus, HIGH);
-        digitalWrite(column_pair_2_3_pin_plus, HIGH);
-        digitalWrite(column_pair_2_4_pin_minus, HIGH);
-        Serial.println(pair);
-    } else {
+      digitalWrite(column_pair_1_1_pin_plus, HIGH);
+      digitalWrite(column_pair_1_2_pin_minus, HIGH);
+      digitalWrite(column_pair_1_3_pin_plus, HIGH);
+      digitalWrite(column_pair_1_4_pin_minus, HIGH);
       Serial.println(pair);
+    } else if (pair == "second") {
+      digitalWrite(column_pair_2_1_pin_plus, HIGH);
+      digitalWrite(column_pair_2_2_pin_minus, HIGH);
+      digitalWrite(column_pair_2_3_pin_plus, HIGH);
+      digitalWrite(column_pair_2_4_pin_minus, HIGH);
+      Serial.println(pair);
+    } else if (pair == "off") {
+      Serial.println("Turning relays off...");
+    } else {
+      Serial.println("Unknown parameter provided for setPins. Doing nothing...");
     }
   }
 
@@ -236,7 +238,7 @@ void setup() {
   pinMode(column_pair_2_3_pin_plus, OUTPUT);
   pinMode(column_pair_2_4_pin_minus, OUTPUT);
 
-  // Relays are controlled by HIGH state, hence to turn it off we need to set the state to LOW
+  //Relays are controlled by HIGH state, hence to turn them off we need to set the state to LOW
   digitalWrite(column_pair_1_1_pin_plus, LOW);
   digitalWrite(column_pair_1_2_pin_minus, LOW);
   digitalWrite(column_pair_1_3_pin_plus, LOW);
@@ -247,7 +249,7 @@ void setup() {
   digitalWrite(column_pair_2_3_pin_plus, LOW);
   digitalWrite(column_pair_2_4_pin_minus, LOW);
 
-  ssid = readFile(LittleFS, ssidPath);//try tutaj? bo inaczej wyjebywuje errory
+  ssid = readFile(LittleFS, ssidPath);
   pass = readFile(LittleFS, passPath);
   ip = readFile(LittleFS, ipPath);
   gateway = readFile (LittleFS, gatewayPath);
@@ -257,7 +259,7 @@ void setup() {
   Serial.println(gateway);
 
   if (initWiFi()) {
-    // Route for root / web page
+    //Route for root / web page
     Serial.println("initwifi true");
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
       Serial.println("wystawiam index");
@@ -281,10 +283,10 @@ void setup() {
       request->send(LittleFS, "/index.html", "text/html", false, processor);
     });
   } else {
-    // Connect to Wi-Fi network with SSID and password
+    //Connect to Wi-Fi network with SSID and password
     Serial.println("Setting AP (Access Point)");
     
-    // NULL sets an open Access Point
+    //NULL sets an open Access Point
     WiFi.softAP("R4_ESP32_AccessPoint", NULL);
 
     IPAddress IP = WiFi.softAPIP();
