@@ -1,3 +1,22 @@
+// Rafal Jurek (jurek.rafal@outlook.com) @ 29/11/2024
+//
+// Original sources: 
+//  https://randomnerdtutorials.com/esp32-wi-fi-manager-asyncwebserver/
+//  https://github.com/espressif/arduino-esp32/blob/master/libraries/WiFi/examples/WiFiScan/WiFiScan.ino
+//
+// Important notice: Relays I use are controlled by LOW state.
+// If yours are by HIGH, change the variable value in line 26!
+//
+// DO NOT use Solid-State Relays (SSRs) since they are not the wisest choice
+// to be applied in audio signal passthroughs.
+//
+// TODO: Try-catches for file openings and readings.
+//       Performance improvements in generating the SSIDs JSON (generateSsidDropdownJsonArray()).
+//       General Clean Code refactoring (restructure).
+//
+// Feel free to contribute!
+//
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
@@ -8,6 +27,9 @@
 
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
+
+//Change this to HIGH if your relays are controlled by that state
+#define CONTROL_STATE LOW
 
 String ssid;
 String pass;
@@ -36,10 +58,13 @@ const int column_pair_1_2_pin_minus = 17;
 const int column_pair_1_3_pin_plus = 18;
 const int column_pair_1_4_pin_minus = 19;
 
-const int column_pair_2_1_pin_plus = 32;
-const int column_pair_2_2_pin_minus = 33;
-const int column_pair_2_3_pin_plus = 26;
-const int column_pair_2_4_pin_minus = 27;
+const int column_pair_2_1_pin_plus = 27;
+const int column_pair_2_2_pin_minus = 26;
+const int column_pair_2_3_pin_plus = 25;
+const int column_pair_2_4_pin_minus = 33;
+
+//Variable to take track of the current setting of active (or not) columns
+int columnPairActive;
 
 //Timer variables
 unsigned long previousMillis = 0;
@@ -106,7 +131,7 @@ String readFile(fs::FS &fs, const char * path){
   return fileContent;
 }
 
-// Write file to LittleFS
+//Write file to LittleFS
 void writeFile(fs::FS &fs, const char * path, const char * message){
   Serial.printf("Writing file: %s\r\n", path);
 
@@ -124,46 +149,41 @@ void writeFile(fs::FS &fs, const char * path, const char * message){
 
 String processor(const String& var) {
   if (var == "STATE") {
-    if (digitalRead(column_pair_1_1_pin_plus) && digitalRead(column_pair_1_3_pin_plus) &&
-        digitalRead(column_pair_2_1_pin_plus) && digitalRead(column_pair_2_3_pin_plus)) {
-          activeColumnPairState = "Żadna";
-    } else if (digitalRead(column_pair_1_1_pin_plus) && digitalRead(column_pair_1_3_pin_plus)) {
-      activeColumnPairState = "Para druga";
-    } else {
-      activeColumnPairState = "Para pierwsza";
+    switch (columnPairActive) {
+      case 0: return "Żadna";
+      case 1: return "Pierwsza para";
+      case 2: return "Druga para";
     }
-    return activeColumnPairState;
-  } 
-  
+  }
   return String();
 }
 
   void setPins(String pair) {
-    //pair = first, second, off
-    digitalWrite(column_pair_1_1_pin_plus, LOW);
-    digitalWrite(column_pair_1_2_pin_minus, LOW);
-    digitalWrite(column_pair_1_3_pin_plus, LOW);
-    digitalWrite(column_pair_1_4_pin_minus, LOW);
+    //pair = "first", "second", "off"
+    digitalWrite(column_pair_1_1_pin_plus, !CONTROL_STATE);
+    digitalWrite(column_pair_1_2_pin_minus, !CONTROL_STATE);
+    digitalWrite(column_pair_1_3_pin_plus, !CONTROL_STATE);
+    digitalWrite(column_pair_1_4_pin_minus, !CONTROL_STATE);
     
-    digitalWrite(column_pair_2_1_pin_plus, LOW);
-    digitalWrite(column_pair_2_2_pin_minus, LOW);
-    digitalWrite(column_pair_2_3_pin_plus, LOW);
-    digitalWrite(column_pair_2_4_pin_minus, LOW);
+    digitalWrite(column_pair_2_1_pin_plus, !CONTROL_STATE);
+    digitalWrite(column_pair_2_2_pin_minus, !CONTROL_STATE);
+    digitalWrite(column_pair_2_3_pin_plus, !CONTROL_STATE);
+    digitalWrite(column_pair_2_4_pin_minus, !CONTROL_STATE);
 
     if (pair == "first") {
-      digitalWrite(column_pair_1_1_pin_plus, HIGH);
-      digitalWrite(column_pair_1_2_pin_minus, HIGH);
-      digitalWrite(column_pair_1_3_pin_plus, HIGH);
-      digitalWrite(column_pair_1_4_pin_minus, HIGH);
-      Serial.println(pair);
+      digitalWrite(column_pair_1_1_pin_plus, CONTROL_STATE);
+      digitalWrite(column_pair_1_2_pin_minus, CONTROL_STATE);
+      digitalWrite(column_pair_1_3_pin_plus, CONTROL_STATE);
+      digitalWrite(column_pair_1_4_pin_minus, CONTROL_STATE);
+      columnPairActive = 1;
     } else if (pair == "second") {
-      digitalWrite(column_pair_2_1_pin_plus, HIGH);
-      digitalWrite(column_pair_2_2_pin_minus, HIGH);
-      digitalWrite(column_pair_2_3_pin_plus, HIGH);
-      digitalWrite(column_pair_2_4_pin_minus, HIGH);
-      Serial.println(pair);
+      digitalWrite(column_pair_2_1_pin_plus, CONTROL_STATE);
+      digitalWrite(column_pair_2_2_pin_minus, CONTROL_STATE);
+      digitalWrite(column_pair_2_3_pin_plus, CONTROL_STATE);
+      digitalWrite(column_pair_2_4_pin_minus, CONTROL_STATE);
+      columnPairActive = 2;
     } else if (pair == "off") {
-      Serial.println("Turning relays off...");
+      columnPairActive = 0;
     } else {
       Serial.println("Unknown parameter provided for setPins. Doing nothing...");
     }
@@ -192,7 +212,6 @@ std::vector<String> scanVisibleNetworks() {
     Serial.print(n);
     Serial.println(" networks found");
     for (int i = 0; i < n; ++i) {
-      // Print SSID and RSSI for each network found
       Serial.print(i + 1);
       Serial.print(": ");
       Serial.print(WiFi.SSID(i));
@@ -238,16 +257,16 @@ void setup() {
   pinMode(column_pair_2_3_pin_plus, OUTPUT);
   pinMode(column_pair_2_4_pin_minus, OUTPUT);
 
-  //Relays are controlled by HIGH state, hence to turn them off we need to set the state to LOW
-  digitalWrite(column_pair_1_1_pin_plus, LOW);
-  digitalWrite(column_pair_1_2_pin_minus, LOW);
-  digitalWrite(column_pair_1_3_pin_plus, LOW);
-  digitalWrite(column_pair_1_4_pin_minus, LOW);
+  //Relays are controlled by LOW state, hence to turn them off we need to set the state to HIGH
+  digitalWrite(column_pair_1_1_pin_plus, !CONTROL_STATE);
+  digitalWrite(column_pair_1_2_pin_minus, !CONTROL_STATE);
+  digitalWrite(column_pair_1_3_pin_plus, !CONTROL_STATE);
+  digitalWrite(column_pair_1_4_pin_minus, !CONTROL_STATE);
 
-  digitalWrite(column_pair_2_1_pin_plus, LOW);
-  digitalWrite(column_pair_2_2_pin_minus, LOW);
-  digitalWrite(column_pair_2_3_pin_plus, LOW);
-  digitalWrite(column_pair_2_4_pin_minus, LOW);
+  digitalWrite(column_pair_2_1_pin_plus, !CONTROL_STATE);
+  digitalWrite(column_pair_2_2_pin_minus, !CONTROL_STATE);
+  digitalWrite(column_pair_2_3_pin_plus, !CONTROL_STATE);
+  digitalWrite(column_pair_2_4_pin_minus, !CONTROL_STATE);
 
   ssid = readFile(LittleFS, ssidPath);
   pass = readFile(LittleFS, passPath);
@@ -259,15 +278,13 @@ void setup() {
   Serial.println(gateway);
 
   if (initWiFi()) {
-    //Route for root / web page
-    Serial.println("initwifi true");
+    //Route for root web page
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-      Serial.println("wystawiam index");
       request->send(LittleFS, "/index.html", "text/html", false, processor);
-      Serial.println("index wystawiony");
     });
     server.serveStatic("/", LittleFS, "/");
-    
+
+    //Routes for controlling the speaker pairs
     server.on("/firstpair", HTTP_GET, [](AsyncWebServerRequest *request) {
       setPins("first");
       request->send(LittleFS, "/index.html", "text/html", false, processor);
@@ -278,6 +295,7 @@ void setup() {
       request->send(LittleFS, "/index.html", "text/html", false, processor);
     });
 
+    //Route to turn the speakers off
     server.on("/alloff", HTTP_GET, [](AsyncWebServerRequest *request) {
       setPins("off");
       request->send(LittleFS, "/index.html", "text/html", false, processor);
@@ -299,11 +317,13 @@ void setup() {
       request->send(200, "application/json", ssidDropdownJsonArray);
   });
 
+    //Route for WiFi Manager
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(LittleFS, "/wifimanager.html", "text/html", false, processor);
     });
     server.serveStatic("/", LittleFS, "/");
   
+    //Route for Wifi Manager parameters input
     server.on("/", HTTP_POST, [](AsyncWebServerRequest *request) {
       int params = request -> params();
       for (int i = 0; i < params; i++) {
@@ -341,7 +361,6 @@ void setup() {
             // Write file to save value
             writeFile(LittleFS, gatewayPath, gateway.c_str());
           }
-          //Serial.printf("POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
         }
       }
 
